@@ -59,26 +59,11 @@ function renderResult(data) {
       <a class="secondary-btn" href="${data.link}" target="_blank" rel="noreferrer">Open source ↗</a>
       ${data.preview ? `<audio class="preview" controls src="${data.preview}"></audio>` : ''}
     </div>
-    <p class="disclaimer">Hasil demo. Pada versi lengkap, sistem akan memanggil API pengenal audio atau AI pencarian.</p>
+    <p class="disclaimer">Hasil dapat berubah sesuai API eksternal yang dikonfigurasi di server.</p>
   `;
 }
 
-function renderAIResults() {
-  const suggestions = [
-    {
-      title: 'Kemungkinan lagu 1',
-      text: 'Lagu dengan vibe chillhop, instrumental lembut, dan tempo sedang. Cocok untuk video dengan mood santai atau sunset.'
-    },
-    {
-      title: 'Kemungkinan lagu 2',
-      text: 'Genre alternatif/indie dengan vokal yang hangat dan melodi repetitif yang mudah diingat di TikTok.'
-    },
-    {
-      title: 'Potensi kata kunci pencarian',
-      text: '"lofi sunset instrumental", "indie mellow female vocal", "chillhop 2024".'
-    }
-  ];
-
+function renderAIResults(suggestions) {
   aiResults.classList.remove('hidden');
   aiResults.innerHTML = `
     <h3>Rekomendasi AI</h3>
@@ -91,7 +76,7 @@ function renderAIResults() {
   `;
 }
 
-document.getElementById('url-form').addEventListener('submit', (event) => {
+document.getElementById('url-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const input = document.getElementById('video-url');
 
@@ -102,21 +87,29 @@ document.getElementById('url-form').addEventListener('submit', (event) => {
 
   setActivity('Mencari lagu dari link…', 'Mengecek metadata audio dan kemungkinan hasil pencocokan.');
 
-  setTimeout(() => {
-    hideActivity();
-    renderResult({
-      meta: 'Match • YouTube / TikTok',
-      title: 'Midnight City',
-      artist: 'M83',
-      album: 'Hurry Up, We’re Dreaming',
-      cover: 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=600&q=80',
-      link: 'https://www.youtube.com/results?search_query=M83+Midnight+City',
-      preview: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
+  try {
+    const response = await fetch('/api/recognize-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: input.value.trim() })
     });
-  }, 1200);
+
+    const payload = await response.json();
+    hideActivity();
+
+    if (!payload.success) {
+      throw new Error(payload.error || 'Gagal memproses link');
+    }
+
+    renderResult(payload.result);
+  } catch (error) {
+    hideActivity();
+    resultBox.classList.remove('hidden');
+    resultBox.innerHTML = `<p class="disclaimer">${error.message}</p>`;
+  }
 });
 
-document.getElementById('file-form').addEventListener('submit', (event) => {
+document.getElementById('file-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const fileInput = document.getElementById('audio-file');
 
@@ -127,21 +120,31 @@ document.getElementById('file-form').addEventListener('submit', (event) => {
 
   setActivity('Menganalisis audio…', 'Membandingkan fingerprint suara dengan database lagu.');
 
-  setTimeout(() => {
-    hideActivity();
-    renderResult({
-      meta: 'Fingerprint match',
-      title: 'Attention',
-      artist: 'Charlie Puth',
-      album: 'Voicenotes',
-      cover: 'https://images.unsplash.com/photo-1525201548942-d8732f6617a0?auto=format&fit=crop&w=600&q=80',
-      link: 'https://www.youtube.com/results?search_query=Charlie+Puth+Attention',
-      preview: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3'
+  try {
+    const formData = new FormData();
+    formData.append('audio', fileInput.files[0]);
+
+    const response = await fetch('/api/recognize-file', {
+      method: 'POST',
+      body: formData
     });
-  }, 1400);
+
+    const payload = await response.json();
+    hideActivity();
+
+    if (!payload.success) {
+      throw new Error(payload.error || 'Gagal memproses file');
+    }
+
+    renderResult(payload.result);
+  } catch (error) {
+    hideActivity();
+    resultBox.classList.remove('hidden');
+    resultBox.innerHTML = `<p class="disclaimer">${error.message}</p>`;
+  }
 });
 
-document.getElementById('ai-form').addEventListener('submit', (event) => {
+document.getElementById('ai-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const query = document.getElementById('ai-query').value.trim();
   const lyrics = document.getElementById('ai-lyrics').value.trim();
@@ -153,8 +156,24 @@ document.getElementById('ai-form').addEventListener('submit', (event) => {
 
   setActivity('Menyusun pencarian AI…', 'Mengolah hint, mood, dan lirik untuk menyarankan kemungkinan lagu.');
 
-  setTimeout(() => {
+  try {
+    const response = await fetch('/api/ai-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, lyrics })
+    });
+
+    const payload = await response.json();
     hideActivity();
-    renderAIResults();
-  }, 1200);
+
+    if (!payload.success) {
+      throw new Error(payload.error || 'Gagal memproses AI search');
+    }
+
+    renderAIResults(payload.suggestions || []);
+  } catch (error) {
+    hideActivity();
+    aiResults.classList.remove('hidden');
+    aiResults.innerHTML = `<p class="disclaimer">${error.message}</p>`;
+  }
 });
